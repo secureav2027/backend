@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,14 +10,16 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-in-ren
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-bearer_scheme = HTTPBearer()
+ADMIN_USERNAME = os.environ["ADMIN_USERNAME"]
+ADMIN_PASSWORD_HASH = os.environ["ADMIN_PASSWORD_HASH"].encode()
 
-# Testing only - replace with a real user store before production use.
-FAKE_USERS_DB = {"admin": "admin"}
+bearer_scheme = HTTPBearer()
 
 
 def authenticate_user(username: str, password: str) -> bool:
-    return FAKE_USERS_DB.get(username) == password
+    if username != ADMIN_USERNAME:
+        return False
+    return bcrypt.checkpw(password.encode(), ADMIN_PASSWORD_HASH)
 
 
 def create_access_token(username: str) -> str:
