@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 
-from app.routers import auth, health, protected
+from app.routers import auth, commands, health, protected
 
 app = FastAPI(title="backend")
 
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(protected.router)
+app.include_router(commands.router)
 
 
 @app.get("/")
