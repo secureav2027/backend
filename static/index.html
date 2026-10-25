@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Panel de control</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; color: #1a1a1a; }
+  h1 { font-size: 1.4rem; }
+  input, button { font-size: 1rem; padding: 8px; }
+  input[type=text], input[type=password] { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  button { cursor: pointer; }
+  #login-box { max-width: 320px; }
+  #error { color: #b00020; min-height: 1.2em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { border-bottom: 1px solid #ddd; text-align: left; padding: 6px 8px; vertical-align: top; }
+  pre { white-space: pre-wrap; font-size: 0.85rem; margin: 0; }
+  .status-pending { color: #996600; }
+  .status-dispatched { color: #0066cc; }
+  .status-completed { color: #0a8a0a; }
+  .status-failed { color: #b00020; }
+  #send-row { display: flex; gap: 8px; margin-top: 16px; }
+  #send-row input { flex: 1; margin-bottom: 0; }
+  #logout { float: right; }
+</style>
+</head>
+<body>
+
+<div id="login-box">
+  <h1>Iniciar sesión</h1>
+  <input id="username" type="text" placeholder="Usuario" value="admin">
+  <input id="password" type="password" placeholder="Contraseña">
+  <button onclick="login()">Entrar</button>
+  <div id="error"></div>
+</div>
+
+<div id="dashboard" style="display:none">
+  <button id="logout" onclick="logout()">Salir</button>
+  <h1>Panel de control</h1>
+
+  <div id="send-row">
+    <input id="command-input" type="text" placeholder="Comando de PowerShell, ej: Get-Process">
+    <button onclick="sendCommand()">Enviar</button>
+  </div>
+  <div id="send-error" style="color:#b00020"></div>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Comando</th><th>Estado</th><th>Resultado</th><th>Creado</th></tr>
+    </thead>
+    <tbody id="commands-body"></tbody>
+  </table>
+</div>
+
+<script>
+let token = localStorage.getItem("token");
+let pollTimer = null;
+
+function showDashboard() {
+  document.getElementById("login-box").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+  refreshCommands();
+  pollTimer = setInterval(refreshCommands, 5000);
+}
+
+function showLogin() {
+  if (pollTimer) clearInterval(pollTimer);
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("login-box").style.display = "block";
+}
+
+async function login() {
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  document.getElementById("error").textContent = "";
+  try {
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      document.getElementById("error").textContent = "Usuario o contraseña incorrectos.";
+      return;
+    }
+    const data = await res.json();
+    token = data.access_token;
+    localStorage.setItem("token", token);
+    showDashboard();
+  } catch (e) {
+    document.getElementById("error").textContent = "No se pudo conectar al backend.";
+  }
+}
+
+function logout() {
+  token = null;
+  localStorage.removeItem("token");
+  showLogin();
+}
+
+async function sendCommand() {
+  const input = document.getElementById("command-input");
+  const command = input.value.trim();
+  if (!command) return;
+  document.getElementById("send-error").textContent = "";
+  try {
+    const res = await fetch("/commands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ command }),
+    });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    if (!res.ok) {
+      document.getElementById("send-error").textContent = "Error al enviar el comando.";
+      return;
+    }
+    input.value = "";
+    refreshCommands();
+  } catch (e) {
+    document.getElementById("send-error").textContent = "No se pudo conectar al backend.";
+  }
+}
+
+async function refreshCommands() {
+  try {
+    const res = await fetch("/commands", {
+      headers: { "Authorization": "Bearer " + token },
+    });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    if (!res.ok) return;
+    const items = await res.json();
+    items.sort((a, b) => b.id - a.id);
+    const body = document.getElementById("commands-body");
+    body.innerHTML = "";
+    for (const item of items) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${item.id}</td>
+        <td><pre>${escapeHtml(item.command)}</pre></td>
+        <td class="status-${item.status}">${item.status}</td>
+        <td><pre>${escapeHtml(item.result || "")}</pre></td>
+        <td>${new Date(item.created_at).toLocaleString()}</td>
+      `;
+      body.appendChild(tr);
+    }
+  } catch (e) {
+    // silent - next poll will retry
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+document.getElementById("password").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") login();
+});
+document.getElementById("command-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendCommand();
+});
+
+if (token) {
+  showDashboard();
+} else {
+  showLogin();
+}
+</script>
+
+</body>
+</html>
