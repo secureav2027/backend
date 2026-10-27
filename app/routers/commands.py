@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app import command_store
@@ -11,6 +11,7 @@ router = APIRouter()
 
 class NewCommand(BaseModel):
     command: str
+    device: str
 
 
 class CommandResult(BaseModel):
@@ -20,12 +21,14 @@ class CommandResult(BaseModel):
 
 @router.post("/commands")
 def create_command(payload: NewCommand, username: str = Depends(get_current_user)):
-    return command_store.add_command(payload.command)
+    return command_store.add_command(payload.command, payload.device)
 
 
 @router.get("/commands/pending")
-def get_pending_commands(username: str = Depends(get_current_user)):
-    return command_store.pop_pending()
+def get_pending_commands(
+    device: str = Query(...), username: str = Depends(get_current_user)
+):
+    return command_store.pop_pending(device)
 
 
 @router.post("/commands/{command_id}/result")
@@ -41,3 +44,8 @@ def report_result(
 @router.get("/commands")
 def list_commands(username: str = Depends(get_current_user)):
     return command_store.list_all()
+
+
+@router.get("/devices")
+def list_devices(username: str = Depends(get_current_user)):
+    return command_store.list_devices()

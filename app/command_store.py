@@ -6,11 +6,12 @@ _next_id = itertools.count(1)
 _commands: dict[int, dict] = {}
 
 
-def add_command(command: str) -> dict:
+def add_command(command: str, device: str) -> dict:
     command_id = next(_next_id)
     entry = {
         "id": command_id,
         "command": command,
+        "device": device,
         "status": "pending",
         "result": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -19,8 +20,10 @@ def add_command(command: str) -> dict:
     return entry
 
 
-def pop_pending() -> list[dict]:
-    pending = [c for c in _commands.values() if c["status"] == "pending"]
+def pop_pending(device: str) -> list[dict]:
+    pending = [
+        c for c in _commands.values() if c["status"] == "pending" and c["device"] == device
+    ]
     for c in pending:
         c["status"] = "dispatched"
     return pending
@@ -37,3 +40,7 @@ def set_result(command_id: int, status: str, result: Optional[str]) -> Optional[
 
 def list_all() -> list[dict]:
     return list(_commands.values())
+
+
+def list_devices() -> list[str]:
+    return sorted({c["device"] for c in _commands.values()})

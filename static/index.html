@@ -38,6 +38,8 @@
   <h1>Panel de control</h1>
 
   <div id="send-row">
+    <input id="device-input" type="text" placeholder="Equipo destino, ej: PC-Casa" list="device-list" style="max-width:200px">
+    <datalist id="device-list"></datalist>
     <input id="command-input" type="text" placeholder="Comando de PowerShell, ej: Get-Process">
     <button onclick="sendCommand()">Enviar</button>
   </div>
@@ -45,7 +47,7 @@
 
   <table>
     <thead>
-      <tr><th>ID</th><th>Comando</th><th>Estado</th><th>Resultado</th><th>Creado</th></tr>
+      <tr><th>ID</th><th>Equipo</th><th>Comando</th><th>Estado</th><th>Resultado</th><th>Creado</th></tr>
     </thead>
     <tbody id="commands-body"></tbody>
   </table>
@@ -58,8 +60,11 @@ let pollTimer = null;
 function showDashboard() {
   document.getElementById("login-box").style.display = "none";
   document.getElementById("dashboard").style.display = "block";
+  const lastDevice = localStorage.getItem("lastDevice");
+  if (lastDevice) document.getElementById("device-input").value = lastDevice;
   refreshCommands();
-  pollTimer = setInterval(refreshCommands, 5000);
+  refreshDevices();
+  pollTimer = setInterval(() => { refreshCommands(); refreshDevices(); }, 5000);
 }
 
 function showLogin() {
@@ -99,24 +104,50 @@ function logout() {
 
 async function sendCommand() {
   const input = document.getElementById("command-input");
+  const deviceInput = document.getElementById("device-input");
   const command = input.value.trim();
-  if (!command) return;
+  const device = deviceInput.value.trim();
+  if (!command || !device) {
+    document.getElementById("send-error").textContent = "Falta el equipo destino o el comando.";
+    return;
+  }
   document.getElementById("send-error").textContent = "";
   try {
     const res = await fetch("/commands", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
-      body: JSON.stringify({ command }),
+      body: JSON.stringify({ command, device }),
     });
     if (res.status === 401 || res.status === 403) { logout(); return; }
     if (!res.ok) {
       document.getElementById("send-error").textContent = "Error al enviar el comando.";
       return;
     }
+    localStorage.setItem("lastDevice", device);
     input.value = "";
     refreshCommands();
+    refreshDevices();
   } catch (e) {
     document.getElementById("send-error").textContent = "No se pudo conectar al backend.";
+  }
+}
+
+async function refreshDevices() {
+  try {
+    const res = await fetch("/devices", {
+      headers: { "Authorization": "Bearer " + token },
+    });
+    if (!res.ok) return;
+    const devices = await res.json();
+    const list = document.getElementById("device-list");
+    list.innerHTML = "";
+    for (const d of devices) {
+      const opt = document.createElement("option");
+      opt.value = d;
+      list.appendChild(opt);
+    }
+  } catch (e) {
+    // silent
   }
 }
 
@@ -135,6 +166,7 @@ async function refreshCommands() {
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${item.id}</td>
+        <td>${escapeHtml(item.device || "")}</td>
         <td><pre>${escapeHtml(item.command)}</pre></td>
         <td class="status-${item.status}">${item.status}</td>
         <td><pre>${escapeHtml(item.result || "")}</pre></td>
