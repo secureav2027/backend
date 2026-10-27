@@ -21,6 +21,12 @@
   #send-row { display: flex; gap: 8px; margin-top: 16px; }
   #send-row input { flex: 1; margin-bottom: 0; }
   #logout { float: right; }
+  #device-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .device-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid #ccc; border-radius: 999px; background: #f5f5f5; cursor: pointer; font-size: 0.85rem; }
+  .device-chip.selected { border-color: #1a1a1a; background: #e8e8e8; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot-online { background: #0a8a0a; }
+  .dot-offline { background: #aaa; }
 </style>
 </head>
 <body>
@@ -38,11 +44,11 @@
   <h1>Panel de control</h1>
 
   <div id="send-row">
-    <input id="device-input" type="text" placeholder="Equipo destino, ej: PC-Casa" list="device-list" style="max-width:200px">
-    <datalist id="device-list"></datalist>
+    <input id="device-input" type="text" placeholder="Equipo destino, ej: PC-Casa" style="max-width:200px">
     <input id="command-input" type="text" placeholder="Comando de PowerShell, ej: Get-Process">
     <button onclick="sendCommand()">Enviar</button>
   </div>
+  <div id="device-chips"></div>
   <div id="send-error" style="color:#b00020"></div>
 
   <table>
@@ -139,12 +145,19 @@ async function refreshDevices() {
     });
     if (!res.ok) return;
     const devices = await res.json();
-    const list = document.getElementById("device-list");
-    list.innerHTML = "";
+    const deviceInput = document.getElementById("device-input");
+    const container = document.getElementById("device-chips");
+    container.innerHTML = "";
     for (const d of devices) {
-      const opt = document.createElement("option");
-      opt.value = d;
-      list.appendChild(opt);
+      const chip = document.createElement("div");
+      chip.className = "device-chip" + (deviceInput.value === d.name ? " selected" : "");
+      chip.innerHTML = `<span class="dot ${d.online ? "dot-online" : "dot-offline"}"></span>${escapeHtml(d.name)}`;
+      chip.onclick = () => {
+        deviceInput.value = d.name;
+        localStorage.setItem("lastDevice", d.name);
+        refreshDevices();
+      };
+      container.appendChild(chip);
     }
   } catch (e) {
     // silent

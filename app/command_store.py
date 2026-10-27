@@ -4,6 +4,9 @@ from typing import Optional
 
 _next_id = itertools.count(1)
 _commands: dict[int, dict] = {}
+_device_last_seen: dict[str, datetime] = {}
+
+ONLINE_THRESHOLD_SECONDS = 30
 
 
 def add_command(command: str, device: str) -> dict:
@@ -21,6 +24,7 @@ def add_command(command: str, device: str) -> dict:
 
 
 def pop_pending(device: str) -> list[dict]:
+    _device_last_seen[device] = datetime.now(timezone.utc)
     pending = [
         c for c in _commands.values() if c["status"] == "pending" and c["device"] == device
     ]
@@ -42,5 +46,15 @@ def list_all() -> list[dict]:
     return list(_commands.values())
 
 
-def list_devices() -> list[str]:
-    return sorted({c["device"] for c in _commands.values()})
+def list_devices() -> list[dict]:
+    now = datetime.now(timezone.utc)
+    devices = [
+        {
+            "name": name,
+            "online": (now - last_seen).total_seconds() <= ONLINE_THRESHOLD_SECONDS,
+            "last_seen": last_seen.isoformat(),
+        }
+        for name, last_seen in _device_last_seen.items()
+    ]
+    devices.sort(key=lambda d: d["name"])
+    return devices
